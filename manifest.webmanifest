@@ -1,0 +1,3 @@
+{ "name": "Lievitatore", "short_name": "Lievitatore", "start_url": "./", "display": "standalone",
+  "background_color": "#f6f3ee", "theme_color": "#a4601a",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }] }

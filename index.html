@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Lievitatore</title>
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#a4601a">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div id="login" class="login" hidden>
+  <form id="loginForm" class="card login-card" autocomplete="on">
+    <h1>Lievitatore</h1>
+    <p class="muted">Accesso riservato.</p>
+    <label>Email <input id="liEmail" type="email" autocomplete="username" required></label>
+    <label>Password <input id="liPass" type="password" autocomplete="current-password" required></label>
+    <button class="btn primary" type="submit">Entra</button>
+    <p id="liErr" class="err" role="alert"></p>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header class="top">
+    <h1>Lievitatore</h1>
+    <span id="demoBadge" class="chip warn" hidden>DEMO · dati simulati</span>
+    <span id="conn" class="chip">…</span>
+  </header>
+
+  <main>
+    <!-- ================= ORA ================= -->
+    <section id="tab-ora" class="tab">
+      <div id="alerts"></div>
+
+      <div class="card hero">
+        <div>
+          <div class="label">Fase</div>
+          <div id="faseNome" class="big">—</div>
+          <div id="faseSub" class="muted"></div>
+        </div>
+        <div class="hero-prog">
+          <div class="label">Tempo del ciclo</div>
+          <div id="tempoCiclo" class="mid">—</div>
+          <div class="bar"><span id="barTempo"></span></div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card metric"><div class="label">Volume</div><div id="mVol" class="val">—</div><div id="mV" class="muted"></div></div>
+        <div class="card metric"><div class="label">Crescita dV/dt</div><div id="mS" class="val">—</div><div class="muted">volumi / ora</div></div>
+        <div class="card metric"><div class="label">Temp. interna</div><div id="mTin" class="val">—</div><div id="mHin" class="muted"></div></div>
+        <div class="card metric"><div class="label">Temp. esterna</div><div id="mText" class="val">—</div><div id="mTextAge" class="muted"></div></div>
+        <div class="card metric"><div class="label">Setpoint</div><div id="mTset" class="val">—</div><div id="mTreq" class="muted"></div></div>
+        <div class="card metric"><div class="label">Avanzamento</div><div id="mP" class="val">—</div><div id="mForza" class="muted"></div></div>
+      </div>
+
+      <div class="card">
+        <div class="row between">
+          <h2>Regolazione</h2>
+          <div class="seg" role="group" aria-label="Modo">
+            <button id="modeOsserva" class="seg-btn">Prova a secco</button>
+            <button id="modeControllo" class="seg-btn">Controllo</button>
+          </div>
+        </div>
+        <div class="pills">
+          <span id="pillHeat" class="pill">Caldo</span>
+          <span id="pillOk" class="pill">In range</span>
+          <span id="pillCool" class="pill">Freddo</span>
+        </div>
+        <p id="regolaTxt" class="muted"></p>
+      </div>
+
+      <div class="card">
+        <div class="row between wrap">
+          <h2>Temperatura e stato caldo/freddo</h2>
+          <select id="tempRange" aria-label="Intervallo">
+            <option value="6">ultime 6 h</option><option value="24" selected>ultime 24 h</option>
+            <option value="72">ultimi 3 giorni</option><option value="0">solo ciclo in corso</option>
+          </select>
+        </div>
+        <div class="chart"><canvas id="chTemp"></canvas></div>
+        <p class="muted small">Sotto: linea a 0 = niente, rossa a +1 = resistenza richiesta, blu a −1 = freddo richiesto.</p>
+      </div>
+
+      <div class="card">
+        <h2>Curva di crescita</h2>
+        <div class="chart"><canvas id="chGrow"></canvas></div>
+        <p class="muted small">Volume (ml) e crescita dV/dt. Le fasce colorate indicano la fase riconosciuta.</p>
+      </div>
+
+      <div class="card">
+        <div class="row between wrap"><h2>Telecamera</h2><a id="camLink" class="muted small" href="#" hidden>apri</a></div>
+        <div id="camBox" class="cam"><img id="camImg" alt="Immagine in diretta" hidden><p id="camMsg" class="muted">Nessun indirizzo immagine impostato (vedi Impostazioni).</p></div>
+      </div>
+
+      <div id="endBox" class="card" hidden>
+        <div class="row between wrap">
+          <div><h2>Ciclo in corso</h2><div id="endInfo" class="muted"></div></div>
+          <button id="btnFine" class="btn danger">Termina lievitazione</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= NUOVO ================= -->
+    <section id="tab-nuovo" class="tab" hidden>
+      <div class="card">
+        <h2>1 · Taratura del contenitore</h2>
+        <p class="muted">Con il contenitore <b>vuoto</b> (disco in fondo) e il laser montato: la scheda memorizza la distanza dal fondo.</p>
+        <div class="row between wrap">
+          <div>Tara attuale: <b id="taraVal">—</b></div>
+          <button id="btnTara" class="btn">Esegui tara</button>
+        </div>
+      </div>
+
+      <form id="formNuovo" class="card" novalidate>
+        <h2>2 · Nuovo rinfresco</h2>
+        <div class="form-grid">
+          <label>Rapporto di rinfresco (1 : farina)
+            <select id="fR"><option value="1">1 : 1</option><option value="1.5">1 : 1,5</option><option value="2">1 : 2</option><option value="3">1 : 3</option></select></label>
+          <label>Acqua (% sulla farina)
+            <select id="fIdr"><option>42</option><option selected>45</option><option>43</option><option>50</option></select></label>
+          <label>Lievito di partenza (g)<input id="fStarter" type="number" min="1" max="2000" step="1" value="100"></label>
+          <label>Volume iniziale dopo il rinfresco (ml)<input id="fVol0" type="number" min="20" max="2000" step="1" required placeholder="es. 100"></label>
+          <label>Temperatura iniziale impasto (°C)<input id="fTinit" type="number" min="0" max="45" step="0.1" placeholder="facoltativa"></label>
+          <label>Farina<input id="fFlour" type="text" maxlength="60" placeholder="es. Manitoba"></label>
+        </div>
+        <fieldset>
+          <legend>Temperatura</legend>
+          <label class="inline"><input type="radio" name="plan" value="durata" checked> Pronto tra <input id="fOre" type="number" min="2" max="48" step="0.5" value="6" class="short"> ore (la scheda sceglie la temperatura, 22–29 °C)</label>
+          <label class="inline"><input type="radio" name="plan" value="fissa"> Temperatura fissa <input id="fTset" type="number" min="4" max="29" step="0.5" value="26" class="short"> °C</label>
+        </fieldset>
+        <label>Note<textarea id="fNotes" rows="2" maxlength="300"></textarea></label>
+        <p id="nuovoMsg" class="err" role="alert"></p>
+        <button id="btnAvvia" class="btn primary" type="submit">Avvia lievitazione</button>
+        <p class="muted small">Dopo l'avvio la scheda prende come livello iniziale la distanza attuale del laser: il lievito deve essere già nel contenitore, livellato.</p>
+      </form>
+    </section>
+
+    <!-- ================= STORICO ================= -->
+    <section id="tab-storico" class="tab" hidden>
+      <div class="card">
+        <h2>Cicli registrati</h2>
+        <p id="stNone" class="muted">Nessun ciclo concluso.</p>
+        <div id="runList" class="runs"></div>
+      </div>
+      <div class="card" id="cmpCard" hidden>
+        <h2>Confronto curve</h2>
+        <div class="chart"><canvas id="chCmp"></canvas></div>
+        <div class="chart short-chart"><canvas id="chCmpT"></canvas></div>
+        <p class="muted small">Crescita (V/V₀) e temperatura in funzione delle ore dall'avvio, per i cicli spuntati.</p>
+      </div>
+    </section>
+
+    <!-- ================= CONSIGLI ================= -->
+    <section id="tab-consigli" class="tab" hidden>
+      <div class="card">
+        <h2>Quando lo vuoi pronto?</h2>
+        <div class="form-grid">
+          <label>Pronto entro<input id="cTarget" type="datetime-local"></label>
+          <label>Posso rinfrescare da<input id="cFrom" type="datetime-local"></label>
+          <label>Acqua (% sulla farina)<input id="cIdr" type="number" min="30" max="120" value="45"></label>
+          <label class="inline"><input id="cNight" type="checkbox" checked> evita rinfreschi di notte (23–6)</label>
+        </div>
+        <div id="calInfo" class="muted"></div>
+      </div>
+      <div class="card"><h2>Proposte</h2><div id="advBest"></div><div class="table-wrap"><table id="advTable"></table></div>
+        <p class="muted small">Il tempo previsto usa lo stesso modello della scheda (Ratkowsky), corretto con i tuoi cicli conclusi. Con pochi cicli l'incertezza è alta: l'intervallo mostrato la riflette.</p></div>
+    </section>
+
+    <!-- ================= IMPOSTAZIONI ================= -->
+    <section id="tab-imp" class="tab" hidden>
+      <div class="card">
+        <h2>Contenitore</h2>
+        <label>Sezione interna (cm²)<input id="sArea" type="number" min="5" max="300" step="0.1"></label>
+        <button id="btnArea" class="btn">Applica alla scheda</button>
+        <p class="muted small">Alla fine di ogni ciclo, inserendo il volume finale, la pagina può ricalcolarla da sola.</p>
+      </div>
+      <div class="card">
+        <h2>Temperatura a riposo</h2>
+        <p class="muted">Quando nessun ciclo è attivo la scheda non regola. Puoi chiederle di mantenere una temperatura (es. 16 °C per conservare).</p>
+        <div class="row"><input id="sHold" type="number" min="4" max="29" step="0.5" placeholder="°C" class="short">
+          <button id="btnHold" class="btn">Imposta</button><button id="btnHoldOff" class="btn">Nessuna regolazione</button></div>
+      </div>
+      <div class="card">
+        <h2>Temperatura esterna</h2>
+        <p class="muted">Per ora non viene misurata: la scheda usa questo valore per decidere se il caldo o il freddo sono utili (caldo solo se il setpoint è sopra, freddo solo se è sotto).</p>
+        <div class="row"><input id="sText" type="number" min="-10" max="45" step="0.5" class="short">
+          <span>°C</span><button id="btnText" class="btn">Applica alla scheda</button></div>
+      </div>
+      <div class="card">
+        <h2>Telecamera</h2>
+        <label>Indirizzo immagine (https, JPEG)<input id="sCam" type="url" placeholder="https://…/frame.jpg"></label>
+        <button id="btnCam" class="btn">Salva su questo dispositivo</button>
+        <p class="muted small">Una pagina https può mostrare solo immagini https. Il flusso locale della Tenda (RTSP) non è visibile dal browser: serve un convertitore.</p>
+      </div>
+      <div class="card">
+        <h2>Manutenzione</h2>
+        <button id="btnClean" class="btn">Elimina misure a riposo più vecchie di 7 giorni</button>
+        <p id="cleanMsg" class="muted small"></p>
+        <h2>Scheda</h2>
+        <div id="devInfo" class="muted"></div>
+        <button id="btnLogout" class="btn">Esci</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabs" aria-label="Sezioni">
+    <button data-tab="ora" class="on">Ora</button>
+    <button data-tab="nuovo">Nuovo</button>
+    <button data-tab="storico">Storico</button>
+    <button data-tab="consigli">Consigli</button>
+    <button data-tab="imp">Impostazioni</button>
+  </nav>
+</div>
+
+<dialog id="dlgFine">
+  <form method="dialog" id="formFine" class="dlg">
+    <h2>Termina lievitazione</h2>
+    <div class="form-grid">
+      <label>Volume finale (ml)<input id="eVol" type="number" min="20" max="3000" step="1" required></label>
+      <label>Esito<select id="eOut">
+        <option value="ok">Pronto al punto giusto</option><option value="troppo_avanti">Troppo avanti</option>
+        <option value="poco_sviluppato">Poco sviluppato</option><option value="acidita">Troppo acido</option>
+        <option value="problema_tecnico">Problema tecnico (non usare per i consigli)</option><option value="annullata">Annullata</option></select></label>
+      <label>Valutazione<select id="eRate"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
+    </div>
+    <label class="inline"><input id="eCal" type="checkbox" checked> ricalcola la sezione del contenitore con questo volume</label>
+    <label>Note<textarea id="eNotes" rows="2" maxlength="400"></textarea></label>
+    <p id="eMsg" class="err" role="alert"></p>
+    <div class="row end"><button class="btn" value="cancel" formnovalidate>Indietro</button><button id="eOk" class="btn danger" value="ok">Termina e salva</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgConf"><form method="dialog" class="dlg">
+  <h2 id="cfTitle"></h2><div id="cfBody"></div>
+  <div class="row end"><button class="btn" value="no">Annulla</button><button id="cfOk" class="btn primary" value="si">Conferma</button></div>
+</form></dialog>
+
+<div id="toast" class="toast" role="status" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
