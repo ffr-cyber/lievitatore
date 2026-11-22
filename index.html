@@ -14,14 +14,13 @@
 <body>
 
 <div id="login" class="login" hidden>
-  <form id="loginForm" class="card login-card" autocomplete="on">
+  <div class="card login-card">
     <h1>Lievitatore</h1>
-    <p class="muted">Accesso riservato.</p>
-    <label>Email <input id="liEmail" type="email" autocomplete="username" required></label>
-    <label>Password <input id="liPass" type="password" autocomplete="current-password" required></label>
-    <button class="btn primary" type="submit">Entra</button>
+    <p class="muted">Accesso riservato al proprietario.</p>
+    <button id="btnGoogle" class="btn primary" type="button">Accedi con Google</button>
     <p id="liErr" class="err" role="alert"></p>
-  </form>
+    <p class="muted small">Vuoi solo vedere com'è fatta? <a href="?demo=1">Apri la demo con dati simulati</a>.</p>
+  </div>
 </div>
 
 <div id="app" hidden>

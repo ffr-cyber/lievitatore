@@ -4,8 +4,8 @@ import { MP, calibrate, predictHours, usableRuns } from './model.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-let cfg = null;
-try { cfg = (await import('./firebase-config.js')).firebaseConfig; } catch (e) { cfg = null; }
+let cfg = null, OWNER = '';
+try { const m = await import('./firebase-config.js'); cfg = m.firebaseConfig; OWNER = m.OWNER_EMAIL || ''; } catch (e) { cfg = null; }
 const DEMO = params.has('demo') || !cfg || String(cfg.apiKey || '').startsWith('INCOLLA');
 
 const S = { live: null, runs: [], runSeries: [], idleSeries: [], growRunId: null, stopRun: null, cmpCache: new Map(), cmpSel: new Set() };
@@ -342,9 +342,9 @@ function wire() {
   $('btnCam').addEventListener('click', () => { localStorage.setItem('camUrl', $('sCam').value.trim()); camTick(); toast('Indirizzo salvato'); });
   $('btnClean').addEventListener('click', async () => { const n = await db.cleanIdle(7); $('cleanMsg').textContent = `Eliminati ${n} campioni.`; });
   $('btnLogout').addEventListener('click', () => db.signOut());
-  $('loginForm').addEventListener('submit', async (e) => {
-    e.preventDefault(); $('liErr').textContent = '';
-    try { await db.signIn($('liEmail').value.trim(), $('liPass').value); } catch (er) { $('liErr').textContent = 'Email o password non corretti.'; }
+  $('btnGoogle').addEventListener('click', async () => {
+    $('liErr').textContent = '';
+    try { await db.signInGoogle(); } catch (er) { $('liErr').textContent = er.code === 'auth/popup-closed-by-user' ? 'Accesso annullato.' : `Accesso non riuscito (${er.code || er.message}).`; }
   });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintCharts);
 }
@@ -355,11 +355,16 @@ async function main() {
   makeCharts(); wire(); paintCharts();
   let started = false;
   db.onAuth((u) => {
+    if (u && !DEMO && OWNER && (u.email || '').toLowerCase() !== OWNER) {      // account Google diverso: fuori
+      $('liErr').textContent = `L'account ${u.email} non è autorizzato. Usa ${OWNER}.`;
+      db.signOut(); return;
+    }
     $('login').hidden = !!u; $('app').hidden = !u;
     if (!u || started) return;
     started = true;
-    db.onLive((l) => { S.live = l; renderLive(); });
-    db.onRuns((r) => { S.runs = r; renderLive(); renderRuns(); });
+    const denied = (e) => { $('alerts').innerHTML = `<div class="alert bad"><b>Accesso ai dati negato</b>${esc(e?.message || '')}</div>`; };
+    db.onLive((l) => { S.live = l; renderLive(); }, denied);
+    db.onRuns((r) => { S.runs = r; renderLive(); renderRuns(); }, denied);
     db.watchSeries('_idle', 900, (rows) => { S.idleSeries = rows; updateTempChart(); });
     setInterval(renderLive, 10000); setInterval(camTick, 3000);
   });

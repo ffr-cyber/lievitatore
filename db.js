@@ -16,11 +16,16 @@ async function firebaseDb(cfg) {
 
   const api = {
     mode: 'firebase',
-    onAuth: (cb) => A.onAuthStateChanged(auth, (u) => cb(u ? { email: u.email } : null)),
-    signIn: (e, p) => A.signInWithEmailAndPassword(auth, e, p),
+    onAuth: (cb) => A.onAuthStateChanged(auth, (u) => cb(u ? { email: u.email, verified: u.emailVerified } : null)),
+    async signInGoogle() {
+      const prov = new A.GoogleAuthProvider();
+      prov.setCustomParameters({ login_hint: 'f.fraccaro@issm.it', prompt: 'select_account' });
+      try { await A.signInWithPopup(auth, prov); }
+      catch (e) { if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') await A.signInWithRedirect(auth, prov); else throw e; }
+    },
     signOut: () => A.signOut(auth),
-    onLive(cb) { return D.onValue(R('live'), (s) => cb(s.val())); },
-    onRuns(cb) { return D.onValue(R('runs'), (s) => cb(Object.values(s.val() || {}))); },
+    onLive(cb, err) { return D.onValue(R('live'), (s) => cb(s.val()), err); },
+    onRuns(cb, err) { return D.onValue(R('runs'), (s) => cb(Object.values(s.val() || {})), err); },
     async series(id, last = 3000) {
       const s = await D.get(D.query(R('series/' + id), D.orderByKey(), D.limitToLast(last)));
       return toRows(s.val());
@@ -122,7 +127,7 @@ function demoDb() {
   return {
     mode: 'demo',
     onAuth: (cb) => { setTimeout(() => cb({ email: 'demo@esempio.it' }), 50); return () => {}; },
-    signIn: async () => {}, signOut: async () => { location.reload(); },
+    signInGoogle: async () => {}, signOut: async () => { location.href = location.pathname; },
     onLive(cb) { listeners.live.push(cb); setTimeout(emit, 30); const h = setInterval(emit, 5000); return () => clearInterval(h); },
     onRuns(cb) { listeners.runs.push(cb); setTimeout(emitRuns, 30); return () => {}; },
     async series(id, last = 3000) { return (series[id] || []).slice(-last); },
