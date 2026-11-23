@@ -51,10 +51,12 @@
       <div class="grid">
         <div class="card metric"><div class="label">Volume</div><div id="mVol" class="val">—</div><div id="mV" class="muted"></div></div>
         <div class="card metric"><div class="label">Crescita dV/dt</div><div id="mS" class="val">—</div><div class="muted">volumi / ora</div></div>
-        <div class="card metric"><div class="label">Temp. interna</div><div id="mTin" class="val">—</div><div id="mHin" class="muted"></div></div>
+        <div class="card metric"><div class="label">Temp. DHT11 (scheda)</div><div id="mTin" class="val">—</div><div id="mHin" class="muted"></div></div>
+        <div class="card metric"><div class="label">Temp. Govee (cella)</div><div id="mTg" class="val">—</div><div id="mTgSub" class="muted"></div></div>
         <div class="card metric"><div class="label">Temp. esterna</div><div id="mText" class="val">—</div><div id="mTextAge" class="muted"></div></div>
         <div class="card metric"><div class="label">Setpoint</div><div id="mTset" class="val">—</div><div id="mTreq" class="muted"></div></div>
         <div class="card metric"><div class="label">Avanzamento</div><div id="mP" class="val">—</div><div id="mForza" class="muted"></div></div>
+        <div class="card metric"><div class="label">Potenza ciabatta</div><div id="mPow" class="val">—</div><div id="mVolt" class="muted"></div></div>
       </div>
 
       <div class="card">
@@ -183,6 +185,11 @@
         <p class="muted">Quando nessun ciclo è attivo la scheda non regola. Puoi chiederle di mantenere una temperatura (es. 16 °C per conservare).</p>
         <div class="row"><input id="sHold" type="number" min="4" max="29" step="0.5" placeholder="°C" class="short">
           <button id="btnHold" class="btn">Imposta</button><button id="btnHoldOff" class="btn">Nessuna regolazione</button></div>
+      </div>
+      <div class="card">
+        <h2>Sensore di regolazione</h2>
+        <p class="muted">La scheda regola sulla temperatura del DHT11 oppure su quella del Govee nella cella (se il Govee non trasmette da più di 2 minuti torna al DHT11).</p>
+        <div class="seg" role="group" aria-label="Sensore"><button id="srcDht" class="seg-btn">DHT11</button><button id="srcGov" class="seg-btn">Govee</button></div>
       </div>
       <div class="card">
         <h2>Temperatura esterna</h2>

@@ -73,7 +73,7 @@ function genRun({ start, end, R, idr, tset, vol0, step = 300000, seed = 1 }) {
     const s = prev.length > 3 ? (V - prev[0][1]) / ((t - prev[0][0]) / 3600000) : 0;
     const f = V < 1.1 ? 1 : V < 1.5 ? 2 : V < 2.5 ? 3 : V < 3.0 ? 4 : 5;
     const e = tset - T;
-    rows.push({ t, d: Math.round(120 - 30 * (V - 1)), vol: vol0 * V, v: V, vf: V, s, ti: T, te: Te, sp: tset,
+    rows.push({ t, d: Math.round(120 - 30 * (V - 1)), vol: vol0 * V, v: V, vf: V, s, ti: T, tg: T + 0.4, te: Te, sp: tset,
                 st: e > 0.4 ? 1 : e < -0.6 ? -1 : 0, f, P });
   }
   return rows;
@@ -112,7 +112,7 @@ function demoDb() {
     return { ts: Math.floor(Date.now() / 1000), mode, run: act ? 'demo-run' : '', fase: act ? faseN[l.f] : 'FERMO', faseIdx: act ? l.f : 0,
       d: l.d, h: dTara - l.d, vol: act ? l.vol : null, V: act ? l.vf : null, Vraw: act ? l.v : null, S: act ? l.s : null, Smax: 0.55, P: act ? l.P : null,
       forza: 1.02, treq: 25.1, ore: act ? (Date.now() - cur.start) / 3600000 : null, oreTarget: 6, tin: l.ti, hin: 52, text: 20.5, hext: null,
-      extAgeMin: 0, textFixed: true, laserOk: true, coda: 0, tuya: 'ok', tset: act ? 25.5 : hold, heat: l.st > 0, cool: l.st < 0, state: l.st, tuyaOk: true, inRange: l.st === 0,
+      extAgeMin: 0, textFixed: true, tg: l.ti + 0.4, hg: 55, gAgeS: 12, gbat: 100, fonte: 'dht', powerW: l.st > 0 ? 101.5 : l.st < 0 ? 64 : 3.2, volt: 228, laserOk: true, coda: 0, tuya: 'ok', tset: act ? 25.5 : hold, heat: l.st > 0, cool: l.st < 0, state: l.st, tuyaOk: true, inRange: l.st === 0,
       fault: false, faultMsg: '', extRule: true, allowHeat: true, allowCool: false, dTara, area, vol0: 100, rssi: -58, fw: '2.0 (demo)', ip: 'demo' };
   };
   const emit = () => listeners.live.forEach((cb) => cb(live()));
@@ -138,7 +138,7 @@ function demoDb() {
       if (action === 'hold') hold = p.tset ?? null;
       if (action === 'tara') { dTara = 148; return { ok: true, msg: 'tara 148 mm (demo)' }; }
       if (action === 'area') area = p.area;
-      if (action === 'text') return { ok: true, msg: 'ok (demo)' };
+      if (action === 'text' || action === 'fonte') return { ok: true, msg: 'ok (demo)' };
       if (action === 'stop') { runs['demo-run'].status = 'done'; emitRuns(); }
       if (action === 'start') return { ok: false, msg: 'In modalità DEMO non si possono avviare cicli.' };
       emit(); return { ok: true, msg: 'ok (demo)' };

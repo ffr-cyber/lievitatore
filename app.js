@@ -65,10 +65,11 @@ function makeCharts() {
     ticks: { stepSize: 1, callback: (v) => (v === 1 ? 'Caldo' : v === 0 ? 'off' : v === -1 ? 'Freddo' : '') } };
   o.plugins.tooltip = { callbacks: { title: (it) => fmtDT(it[0].parsed.x) } };
   chTemp = new Chart($('chTemp'), { type: 'line', options: o, data: { datasets: [
-    { label: 'Interna', data: [], yAxisID: 'y', spanGaps: 2700000 }, { label: 'Esterna', data: [], yAxisID: 'y', borderDash: [4, 4], spanGaps: 2700000 },
+    { label: 'DHT11', data: [], yAxisID: 'y', spanGaps: 2700000 }, { label: 'Esterna', data: [], yAxisID: 'y', borderDash: [4, 4], spanGaps: 2700000 },
     { label: 'Setpoint', data: [], yAxisID: 'y', borderDash: [8, 3], stepped: 'before', spanGaps: 2700000 },
     { label: 'Stato', data: [], yAxisID: 'y2', stepped: 'before', spanGaps: 2700000, borderWidth: 2,
-      segment: { borderColor: (c) => (c.p0.parsed.y > 0 ? css('--heat') : c.p0.parsed.y < 0 ? css('--cool') : css('--muted')) } }] } });
+      segment: { borderColor: (c) => (c.p0.parsed.y > 0 ? css('--heat') : c.p0.parsed.y < 0 ? css('--cool') : css('--muted')) } },
+    { label: 'Govee', data: [], yAxisID: 'y', spanGaps: 2700000 }] } });
 
   const g = baseOpts(); g.scales.x.ticks = { callback: (v) => fmtClock(v), maxTicksLimit: 6 };
   g.scales.y = { title: { display: true, text: 'ml' } };
@@ -89,6 +90,7 @@ function paintCharts() {
   Object.assign(chTemp.data.datasets[1], { borderColor: mut, backgroundColor: mut });
   Object.assign(chTemp.data.datasets[2], { borderColor: cool, backgroundColor: cool, borderWidth: 1.5 });
   Object.assign(chTemp.data.datasets[3], { borderColor: mut, backgroundColor: mut });
+  Object.assign(chTemp.data.datasets[4], { borderColor: css('--ok'), backgroundColor: css('--ok') });
   Object.assign(chGrow.data.datasets[0], { borderColor: acc, backgroundColor: acc });
   Object.assign(chGrow.data.datasets[1], { borderColor: cool, backgroundColor: cool });
   chTemp.update('none'); chGrow.update('none'); chCmp.update('none'); chCmpT.update('none');
@@ -101,7 +103,7 @@ function updateTempChart() {
   const rows = [...S.idleSeries, ...S.runSeries].filter((r) => r.t >= lo).sort((a, b) => a.t - b.t);
   const pt = (k) => rows.filter((r) => num(r[k])).map((r) => ({ x: r.t, y: r[k] }));
   chTemp.data.datasets[0].data = pt('ti'); chTemp.data.datasets[1].data = pt('te');
-  chTemp.data.datasets[2].data = pt('sp'); chTemp.data.datasets[3].data = pt('st');
+  chTemp.data.datasets[2].data = pt('sp'); chTemp.data.datasets[3].data = pt('st'); chTemp.data.datasets[4].data = pt('tg');
   chTemp.options.scales.x.min = lo; chTemp.options.scales.x.max = now;
   chTemp.update('none');
 }
@@ -137,6 +139,7 @@ function alerts(L) {
       : `Per essere pronto all'ora voluta servirebbero ${fmt(L.treq)} °C (sopra ${MP.tsetMax}). Sarà pronto in ritardo: al prossimo rinfresco usa più lievito.`]);
   }
   if (L && !L.textFixed && num(L.extAgeMin) && L.extAgeMin > 60) a.push(['warn', 'Temperatura esterna non aggiornata', `Il Govee non invia dati da ${L.extAgeMin} min: la regola ambiente può non essere applicata.`]);
+  if (L && L.fonte === 'govee' && !(L.gAgeS >= 0 && L.gAgeS < 120)) a.push(['warn', 'Govee non ricevuto', 'La regolazione è impostata sul Govee ma il segnale Bluetooth manca: la scheda sta usando il DHT11.']);
   if (L && L.laserOk === false) a.push(['bad', 'Laser non trovato', 'La scheda non vede il VL53L0X: controlla i collegamenti SDA/SCL/VIN/GND.']);
   if (L?.coda > 5) a.push(['info', 'Dati in arrivo', `La scheda ha ${L.coda} misure in attesa di invio (rete lenta o assente da poco).`]);
   if (L?.fase === 'PRONTO') a.push(['ok', 'Pronto', 'Il lievito ha raggiunto il punto di maturazione: usalo o rinfresca.']);
@@ -157,6 +160,11 @@ function renderLive() {
   $('mVol').textContent = num(L.vol) ? `${fmt(L.vol, 0)} ml` : '—'; $('mV').textContent = num(L.V) ? `V/V₀ ${fmt(L.V, 2)}` : '';
   $('mS').textContent = num(L.S) ? fmt(L.S, 2) : '—';
   $('mTin').textContent = num(L.tin) ? `${fmt(L.tin)} °C` : '—'; $('mHin').textContent = num(L.hin) ? `UR ${fmt(L.hin, 0)}%` : '';
+  $('mTg').textContent = num(L.tg) ? `${fmt(L.tg)} °C` : '—';
+  $('mTgSub').textContent = num(L.tg) ? `UR ${fmt(L.hg, 0)}% · ${L.gAgeS >= 0 ? Math.round(L.gAgeS) + ' s fa' : ''}${L.gbat >= 0 ? ' · batt. ' + L.gbat + '%' : ''}${num(L.tin) ? ' · Δ ' + fmt(L.tg - L.tin) + ' °C' : ''}` : 'non ricevuto (Bluetooth)';
+  $('mPow').textContent = num(L.powerW) ? `${fmt(L.powerW, 1)} W` : '—';
+  $('mVolt').textContent = num(L.volt) ? `${fmt(L.volt, 0)} V · ciabatta ${L.tuya || ''}` : (L.tuya ? `ciabatta ${L.tuya}` : '');
+  $('srcDht').classList.toggle('on', L.fonte !== 'govee'); $('srcGov').classList.toggle('on', L.fonte === 'govee');
   $('mText').textContent = num(L.text) ? `${fmt(L.text)} °C` : '—';
   $('mTextAge').textContent = L.textFixed ? 'valore impostato' : (L.extAgeMin >= 0 ? `aggiornata ${L.extAgeMin} min fa` : 'non ancora letta');
   if (document.activeElement !== $('sText') && num(L.text) && !$('sText').value) $('sText').value = L.text;
@@ -338,6 +346,8 @@ function wire() {
   $('btnHold').addEventListener('click', () => cmd('hold', { tset: +$('sHold').value }, 'Temperatura a riposo impostata'));
   $('btnHoldOff').addEventListener('click', () => cmd('hold', { tset: null }, 'Nessuna regolazione a riposo'));
   $('sCam').value = localStorage.getItem('camUrl') || '';
+  $('srcDht').addEventListener('click', () => cmd('fonte', { src: 'dht' }, 'Regolazione sul DHT11'));
+  $('srcGov').addEventListener('click', () => cmd('fonte', { src: 'govee' }, 'Regolazione sul Govee'));
   $('btnText').addEventListener('click', () => cmd('text', { t: +$('sText').value }, 'Temperatura esterna aggiornata'));
   $('btnCam').addEventListener('click', () => { localStorage.setItem('camUrl', $('sCam').value.trim()); camTick(); toast('Indirizzo salvato'); });
   $('btnClean').addEventListener('click', async () => { const n = await db.cleanIdle(7); $('cleanMsg').textContent = `Eliminati ${n} campioni.`; });
