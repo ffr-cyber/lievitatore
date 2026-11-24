@@ -139,7 +139,7 @@ function alerts(L) {
       : `Per essere pronto all'ora voluta servirebbero ${fmt(L.treq)} °C (sopra ${MP.tsetMax}). Sarà pronto in ritardo: al prossimo rinfresco usa più lievito.`]);
   }
   if (L && !L.textFixed && num(L.extAgeMin) && L.extAgeMin > 60) a.push(['warn', 'Temperatura esterna non aggiornata', `Il Govee non invia dati da ${L.extAgeMin} min: la regola ambiente può non essere applicata.`]);
-  if (L && L.fonte === 'govee' && !(L.gAgeS >= 0 && L.gAgeS < 120)) a.push(['warn', 'Govee non ricevuto', 'La regolazione è impostata sul Govee ma il segnale Bluetooth manca: la scheda sta usando il DHT11.']);
+  if (L && L.fonte === 'govee' && !(L.gAgeS >= 0 && L.gAgeS < 120)) a.push(['warn', 'Govee non ricevuto', 'La regolazione è impostata sul Govee ma il dato non è recente (il cloud Govee si aggiorna ogni ~10 min): la scheda sta usando il DHT11.']);
   if (L && L.laserOk === false) a.push(['bad', 'Laser non trovato', 'La scheda non vede il VL53L0X: controlla i collegamenti SDA/SCL/VIN/GND.']);
   if (L?.coda > 5) a.push(['info', 'Dati in arrivo', `La scheda ha ${L.coda} misure in attesa di invio (rete lenta o assente da poco).`]);
   if (L?.fase === 'PRONTO') a.push(['ok', 'Pronto', 'Il lievito ha raggiunto il punto di maturazione: usalo o rinfresca.']);
@@ -161,7 +161,7 @@ function renderLive() {
   $('mS').textContent = num(L.S) ? fmt(L.S, 2) : '—';
   $('mTin').textContent = num(L.tin) ? `${fmt(L.tin)} °C` : '—'; $('mHin').textContent = num(L.hin) ? `UR ${fmt(L.hin, 0)}%` : '';
   $('mTg').textContent = num(L.tg) ? `${fmt(L.tg)} °C` : '—';
-  $('mTgSub').textContent = num(L.tg) ? `UR ${fmt(L.hg, 0)}% · ${L.gAgeS >= 0 ? Math.round(L.gAgeS) + ' s fa' : ''}${L.gbat >= 0 ? ' · batt. ' + L.gbat + '%' : ''}${num(L.tin) ? ' · Δ ' + fmt(L.tg - L.tin) + ' °C' : ''}` : 'non ricevuto (Bluetooth)';
+  $('mTgSub').textContent = num(L.tg) ? `UR ${fmt(L.hg, 0)}% · ${L.gAgeS >= 0 ? Math.round(L.gAgeS / 60) + ' min fa' : ''}${L.gbat >= 0 ? ' · batt. ' + L.gbat + '%' : ''}${num(L.tin) ? ' · Δ ' + fmt(L.tg - L.tin) + ' °C' : ''}` : 'non ricevuto (cloud Govee)';
   $('mPow').textContent = num(L.powerW) ? `${fmt(L.powerW, 1)} W` : '—';
   $('mVolt').textContent = num(L.volt) ? `${fmt(L.volt, 0)} V · ciabatta ${L.tuya || ''}` : (L.tuya ? `ciabatta ${L.tuya}` : '');
   $('srcDht').classList.toggle('on', L.fonte !== 'govee'); $('srcGov').classList.toggle('on', L.fonte === 'govee');
