@@ -179,7 +179,8 @@ function renderLive() {
   $('pillHeat').textContent = 'Caldo' + (L.heat ? w : ''); $('pillCool').textContent = 'Freddo' + (L.cool ? w : '');
   $('regolaTxt').textContent = L.extRule
     ? `Regola ambiente: caldo ${L.allowHeat ? 'consentito' : 'bloccato'}, freddo ${L.allowCool ? 'consentito' : 'bloccato'} (setpoint ${fmt(L.tset)} °C, esterna ${fmt(L.text)} °C).`
-    : 'Temperatura esterna non disponibile: la regola ambiente non è applicata.';
+    : (L.tset == null ? `Nessun setpoint: la scheda non regola (temperatura esterna ${fmt(L.text)} °C).`
+      : 'Temperatura esterna non disponibile: la regola ambiente non è applicata.');
   $('endBox').hidden = !L.run;
   const run = S.runs.find((r) => r.id === L.run);
   $('endInfo').textContent = run ? `Avviato ${fmtDT(run.start)} · rapporto 1:${run.ratio} · acqua ${run.idr}%` : '';
