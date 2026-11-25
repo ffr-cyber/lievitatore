@@ -168,6 +168,10 @@ function renderLive() {
   $('mText').textContent = num(L.text) ? `${fmt(L.text)} °C` : '—';
   $('mTextAge').textContent = L.textFixed ? 'valore impostato' : (L.extAgeMin >= 0 ? `aggiornata ${L.extAgeMin} min fa` : 'non ancora letta');
   if (document.activeElement !== $('sText') && num(L.text) && !$('sText').value) $('sText').value = L.text;
+  $('provaTxt').textContent = L.prova
+    ? (L.provaFase === 1 ? `Prova ${L.prova}: uscita accesa da ${Math.round(L.provaS / 60)} min, target ${fmt(L.provaT)} °C.`
+      : `Prova ${L.prova}: uscita spenta, registro il rilassamento da ${Math.round(L.provaS / 60)} min (picco ${fmt(L.provaPk)} °C).`)
+    : 'Nessuna prova in corso.';
   $('mTset').textContent = num(L.tset) ? `${fmt(L.tset)} °C` : 'nessuno';
   $('mTreq').textContent = num(L.treq) && Math.abs(L.treq - L.tset) > 0.3 ? `richiesti ${fmt(L.treq)} °C` : '';
   $('mP').textContent = num(L.P) ? `${fmt(L.P * 100, 0)} %` : '—';
@@ -349,6 +353,12 @@ function wire() {
   $('sCam').value = localStorage.getItem('camUrl') || '';
   $('srcDht').addEventListener('click', () => cmd('fonte', { src: 'dht' }, 'Regolazione sul DHT11'));
   $('srcGov').addEventListener('click', () => cmd('fonte', { src: 'govee' }, 'Regolazione sul Govee'));
+  $('btnProva').addEventListener('click', async () => {
+    const tipo = $('pTipo').value, t = +$('sPt').value;
+    if (!await confirmDlg('Avviare la prova?', `<p>La scheda comanderà davvero la ciabatta: <b>${tipo === 'caldo' ? 'resistenza accesa' : 'cantinetta accesa'}</b> in continuo fino a ${fmt(t)} °C, poi spenta.</p><p>Controlla che il termostato della cantinetta sia sul punto giusto e che la cella sia sorvegliata.</p>`, 'Avvia')) return;
+    await cmd('prova', { tipo, t }, 'Prova avviata');
+  });
+  $('btnProvaOff').addEventListener('click', () => cmd('prova', { tipo: 'off' }, 'Prova fermata'));
   $('btnText').addEventListener('click', () => cmd('text', { t: +$('sText').value }, 'Temperatura esterna aggiornata'));
   $('btnCam').addEventListener('click', () => { localStorage.setItem('camUrl', $('sCam').value.trim()); camTick(); toast('Indirizzo salvato'); });
   $('btnClean').addEventListener('click', async () => { const n = await db.cleanIdle(7); $('cleanMsg').textContent = `Eliminati ${n} campioni.`; });

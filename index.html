@@ -187,6 +187,14 @@
           <button id="btnHold" class="btn">Imposta</button><button id="btnHoldOff" class="btn">Nessuna regolazione</button></div>
       </div>
       <div class="card">
+        <h2>Prova a gradino (taratura della cella)</h2>
+        <p class="muted">Accende caldo (resistenza) o freddo (cantinetta) <b>in continuo</b> fino a che il sensore interno raggiunge il valore, poi spegne e registra ogni 10 s come la temperatura si assesta (sovraelongazione e costante di raffreddamento). Il caldo parte solo sopra la temperatura esterna, il freddo solo sotto.</p>
+        <div class="row"><select id="pTipo"><option value="caldo">Caldo</option><option value="freddo">Freddo</option></select>
+          <input id="sPt" type="number" min="4" max="29" step="0.5" value="28" class="short"><span>°C</span>
+          <button id="btnProva" class="btn">Avvia prova</button><button id="btnProvaOff" class="btn">Ferma</button></div>
+        <p id="provaTxt" class="muted small">Nessuna prova in corso.</p>
+      </div>
+      <div class="card">
         <h2>Sensore di regolazione</h2>
         <p class="muted">La scheda regola sulla temperatura del DHT11 oppure su quella del Govee nella cella (se il Govee non trasmette da più di 2 minuti torna al DHT11).</p>
         <div class="seg" role="group" aria-label="Sensore"><button id="srcDht" class="seg-btn">DHT11</button><button id="srcGov" class="seg-btn">Govee</button></div>
