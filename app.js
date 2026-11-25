@@ -386,7 +386,7 @@ async function main() {
     const denied = (e) => { $('alerts').innerHTML = `<div class="alert bad"><b>Accesso ai dati negato</b>${esc(e?.message || '')}</div>`; };
     db.onLive((l) => { S.live = l; renderLive(); }, denied);
     db.onRuns((r) => { S.runs = r; renderLive(); renderRuns(); }, denied);
-    db.watchSeries('_idle', 900, (rows) => { S.idleSeries = rows; updateTempChart(); });
+    db.watchSeries('_idle', 3000, (rows) => { const st = Math.ceil(rows.length / 1200); S.idleSeries = st > 1 ? rows.filter((_, i) => i % st === 0 || i === rows.length - 1) : rows; updateTempChart(); });
     setInterval(renderLive, 10000); setInterval(camTick, 3000);
   });
 }
