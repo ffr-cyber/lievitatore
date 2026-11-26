@@ -144,6 +144,11 @@ function alerts(L) {
   }
   if (L && !L.textFixed && num(L.extAgeMin) && L.extAgeMin > 60) a.push(['warn', 'Temperatura esterna non aggiornata', `Il Govee non invia dati da ${L.extAgeMin} min: la regola ambiente può non essere applicata.`]);
   if (L && L.fonte === 'govee' && !(L.gAgeS >= 0 && L.gAgeS < 120)) a.push(['warn', 'Govee non ricevuto', 'La regolazione è impostata sul Govee ma il dato non è recente (il cloud Govee si aggiorna ogni ~10 min): la scheda sta usando il DHT11.']);
+  if (L?.run && S.runSeries.length > 120) {      // laser che non vede variazioni per ore: bersaglio fermo o fascio altrove
+    const rs = S.runSeries.filter((r) => num(r.d)), h = rs.length ? (rs[rs.length - 1].t - rs[0].t) / 3600e3 : 0;
+    if (h >= 4) { const ds = rs.map((r) => r.d), spread = Math.max(...ds) - Math.min(...ds);
+      if (spread <= 2) a.push(['warn', 'Il laser non vede variazioni', `Da ${fmtDur(h)} la distanza resta a ${fmt(ds[ds.length - 1], 0)} mm (±${fmt(spread / 2, 0)}): se l'impasto sta salendo, il bersaglio non lo segue o il fascio non arriva alla superficie.`]); }
+  }
   if (L && L.laserOk === false) a.push(['bad', 'Laser non trovato', 'La scheda non vede il VL53L0X: controlla i collegamenti SDA/SCL/VIN/GND.']);
   if (L?.coda > 5) a.push(['info', 'Dati in arrivo', `La scheda ha ${L.coda} misure in attesa di invio (rete lenta o assente da poco).`]);
   if (L?.fase === 'PRONTO') a.push(['ok', 'Pronto', 'Il lievito ha raggiunto il punto di maturazione: usalo o rinfresca.']);
@@ -161,7 +166,7 @@ function renderLive() {
   const tgt = L.oreTarget > 0 ? L.oreTarget : null;
   $('tempoCiclo').textContent = L.run ? `${fmtDur(L.ore)}${tgt ? ' su ' + fmtDur(tgt) : ''}` : '—';
   $('barTempo').style.width = L.run && tgt ? Math.min(100, (L.ore / tgt) * 100) + '%' : '0';
-  $('mVol').textContent = num(L.vol) ? `${fmt(L.vol, 0)} ml` : '—'; $('mV').textContent = num(L.V) ? `V/V₀ ${fmt(L.V, 2)}` : '';
+  $('mVol').textContent = num(L.vol) ? `${fmt(L.vol, 0)} ml` : '—'; $('mV').textContent = [num(L.V) ? `V/V₀ ${fmt(L.V, 2)}` : '', num(L.d) ? `laser ${fmt(L.d, 0)} mm` : ''].filter(Boolean).join(' · ');
   $('mS').textContent = num(L.S) ? fmt(L.S, 2) : '—';
   $('mTin').textContent = num(L.tin) ? `${fmt(L.tin)} °C` : '—'; $('mHin').textContent = num(L.hin) ? `UR ${fmt(L.hin, 0)}%` : '';
   $('mTg').textContent = num(L.tg) ? `${fmt(L.tg)} °C` : '—';
