@@ -1,6 +1,6 @@
 // app.js - interfaccia del lievitatore
 import { openDb } from './db.js';
-import { MP, calibrate, predictHours, usableRuns } from './model.js';
+import { MP, TLIM, SHAPE, calibrate, predictHours, usableRuns, fitCurve, curveV, advise, health, coverage, nextTests, T_BANDS, REF_1_1 } from './model.js?v=m2';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -41,7 +41,7 @@ const OUT_TXT = { ok: 'pronto al punto giusto', troppo_avanti: 'troppo avanti', 
 const PH_COL = [null, '#8a8a8a', '#2c8a57', '#e0a31a', '#c98a2b', '#d9731a', '#d03b3b'];
 
 // ------------------------------------------------------------------ grafici
-let chTemp, chGrow, chCmp, chCmpT;
+let chTemp, chGrow, chCmp, chCmpT, chAdv;
 const themeSync = () => { Chart.defaults.color = css('--muted'); Chart.defaults.borderColor = css('--line'); Chart.defaults.font.family = 'system-ui, sans-serif'; };
 const baseOpts = (xTitle) => ({ parsing: false, animation: false, responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
   elements: { point: { radius: 0 }, line: { borderWidth: 2, tension: 0.15 } }, plugins: { legend: { labels: { boxWidth: 12 } } },
@@ -82,6 +82,10 @@ function makeCharts() {
   chCmp = new Chart($('chCmp'), { type: 'line', options: c1, data: { datasets: [] } });
   const c2 = baseOpts('ore dall\'avvio'); c2.scales.y = { title: { display: true, text: '°C' } };
   chCmpT = new Chart($('chCmpT'), { type: 'line', options: c2, data: { datasets: [] } });
+  const c3 = baseOpts('ore dal rinfresco'); c3.scales.y = { title: { display: true, text: 'V / V₀' } };
+  chAdv = new Chart($('chAdv'), { type: 'line', options: c3, data: { datasets: [
+    { label: 'Previsto', data: [], borderColor: css('--accent'), backgroundColor: css('--accent') },
+    { label: 'Pronto', data: [], showLine: false, pointRadius: 6, borderColor: css('--ok'), backgroundColor: css('--ok') }] } });
 }
 function paintCharts() {
   themeSync();
@@ -236,10 +240,12 @@ async function finishRun() {
     const rows = await db.series(run.id, 5000);
     const ti = rows.map((r) => r.ti).filter(num), fr = rows.find((r) => r.f >= 4);
     const dh = num(L.h) && num(L.h0) ? L.h - L.h0 : NaN;
+    const fit = fitCurve(rows.filter((x) => num(x.vf)).map((x) => ({ h: (x.t - run.start) / 3600e3, v: x.vf })));
     const r = await db.sendCmd('stop', {});
     if (!r.ok) { msg.textContent = `Non riesco a fermare la scheda: ${r.msg}`; $('eOk').disabled = false; return; }
     await db.updateRun(run.id, { status: out === 'annullata' ? 'cancelled' : 'done', end: Date.now(), volFinal: vf, outcome: out,
       rating: $('eRate').value ? +$('eRate').value : null, endNotes: $('eNotes').value.trim(),
+      fit: fit && fit.rmse < 0.12 ? { A: +fit.A.toFixed(3), k: +fit.k.toFixed(3), tm: +fit.tm.toFixed(3), readyH: +fit.readyH.toFixed(3), rmse: +fit.rmse.toFixed(4), peakH: +fit.peakH.toFixed(2), peakV: +fit.peakV.toFixed(3) } : null,
       readyH: fr ? (fr.t - run.start) / 3600e3 : null, peakV: Math.max(...rows.map((x) => x.vf || 0), 0) || null,
       tMean: ti.length ? ti.reduce((a, b) => a + b, 0) / ti.length : null, areaUsed: L.area });
     if ($('eCal').checked && num(dh) && dh > 8) {
@@ -289,25 +295,62 @@ async function exportCsv(id) {
 
 // ------------------------------------------------------------------ consigli
 const dtLocal = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+let advState = null;
 function renderAdvice() {
   const cal = calibrate(S.runs), n = cal.n;
-  $('calInfo').textContent = n ? `Calibrato su ${n} ciclo${n > 1 ? 'i' : ''} concluso${n > 1 ? 'i' : ''} (fattore ${fmt(cal.c, 2)}, incertezza ±${fmt(cal.spread * 100, 0)}%).` : 'Nessun ciclo concluso: uso il modello di partenza, incertezza ±25%.';
+  $('calInfo').textContent = n ? `Calibrato su ${n} ciclo${n > 1 ? 'i' : ''} concluso${n > 1 ? 'i' : ''}${cal.nFit ? ` (${cal.nFit} con curva adattata)` : ''} · fattore ${fmt(cal.c, 2)}, incertezza ±${fmt(cal.spread * 100, 0)}%.` : 'Nessun ciclo concluso: uso il modello di partenza, incertezza ±25%.';
+  renderHealth(cal); renderCoverage(); renderStrategy(cal);
   const target = new Date($('cTarget').value).getTime(), from = new Date($('cFrom').value).getTime(), idr = +$('cIdr').value || 45, noNight = $('cNight').checked;
+  const R = +$('cRatio').value, frac = +$('cFrac').value;
   if (!Number.isFinite(target) || !Number.isFinite(from)) return;
-  const rows = [];
-  for (const R of [1, 1.5, 2, 3]) for (const T of [23, 25, 27, 29]) {
-    const h = predictHours(cal, R, idr, T), start = target - h * 3600e3, hr = new Date(start).getHours();
-    const night = hr >= 23 || hr < 6, late = start < from, nR = cal.perRatio[String(R)]?.n || 0;
-    rows.push({ R, T, h, start, night, late, nR, ok: !late && !(noNight && night), score: Math.abs(T - 26) - 0.5 * nR });
+  const ore = (target - from) / 3600e3;
+  if (ore < 1.5) { $('advBest').innerHTML = '<div class="alert warn"><b>Tempo troppo breve</b>Servono almeno un paio d\'ore tra il rinfresco e l\'orario voluto.</div>'; return; }
+  const opts = advise(cal, ore, idr, [1, 1.5, 2, 3], frac), me = opts.find((o) => o.R === R);
+  const hr = new Date(from).getHours(), night = hr >= 23 || hr < 6;
+  let msg;
+  if (me.feasible) {
+    msg = `<div class="alert ok"><b>1 : ${R} a ${fmt(me.Treq, 1)} °C</b>Rinfresca alle ${fmtDT(from)} e tieni la cella a ${fmt(me.Treq, 1)} °C: sarà pronto ${fmtDT(target)} (tra ${fmtDur(me.lo)} e ${fmtDur(me.hi)}).${night && noNight ? ' <br>Attenzione: è un orario di notte.' : ''}${me.Treq < MP.tsetMin ? '<br>Sotto 22 °C usa la <b>temperatura fissa</b> nel nuovo rinfresco.' : ''}</div>`;
+  } else if (me.early) {
+    msg = `<div class="alert warn"><b>Troppo tempo per 1 : ${R}</b>Servirebbe ${fmt(me.Treq, 1)} °C, sotto il minimo di ${TLIM.min} °C. A ${TLIM.min} °C sarà pronto dopo circa ${fmtDur(me.hours)}: usa un rapporto più diluito o rinfresca più tardi.</div>`;
+  } else {
+    msg = `<div class="alert warn"><b>Poco tempo per 1 : ${R}</b>Servirebbe ${fmt(me.Treq, 1)} °C, sopra il massimo di ${TLIM.max} °C. A ${TLIM.max} °C sarà pronto dopo circa ${fmtDur(me.hours)}: usa più lievito (rapporto 1 : 1) o rinfresca prima.</div>`;
   }
-  rows.sort((a, b) => (b.ok - a.ok) || (a.score - b.score));
-  const best = rows[0], sp = cal.spread;
-  $('advBest').innerHTML = best.ok
-    ? `<div class="alert ok"><b>Consiglio: rapporto 1 : ${best.R} a ${best.T} °C</b>Rinfresca alle ${fmtDT(best.start)} (${best.start > Date.now() ? 'tra ' + fmtDur((best.start - Date.now()) / 3600e3) : 'ora'}). Pronto dopo circa ${fmtDur(best.h)} (tra ${fmtDur(best.h * (1 - sp))} e ${fmtDur(best.h * (1 + sp))}).</div>`
-    : `<div class="alert warn"><b>Nessuna combinazione rispetta i vincoli</b>Prova a spostare l'orario o a togliere il vincolo notturno. In ogni caso, rinfrescando a ${fmtDT(from)} con 1 : 1 a 29 °C sarà pronto verso le ${fmtClock(from + predictHours(cal, 1, idr, 29) * 3600e3)}.</div>`;
-  $('advTable').innerHTML = '<tr><th>Rapporto</th><th>Temp.</th><th>Rinfresca alle</th><th>Pronto dopo</th><th>Note</th></tr>' +
-    rows.slice(0, 10).map((r, i) => `<tr class="${i === 0 && r.ok ? 'best' : r.ok ? '' : 'dim'}"><td>1 : ${r.R}</td><td>${r.T} °C</td><td>${fmtDT(r.start)}</td><td>${fmtDur(r.h)} ±${fmt(sp * 100, 0)}%</td>
-      <td>${[r.late ? 'troppo tardi' : '', r.night ? 'di notte' : '', r.nR ? `già provato ${r.nR}×` : 'mai provato'].filter(Boolean).join(' · ')}</td></tr>`).join('');
+  $('advBest').innerHTML = msg;
+  advState = { R, idr, T: +me.T.toFixed(1) };
+  const cur = me.cur, tEnd = Math.max(me.hours * 1.35, 4), pts = [];
+  for (let h = 0; h <= tEnd; h += tEnd / 120) pts.push({ x: h, y: curveV(cur, h) });
+  chAdv.data.datasets[0].data = pts; chAdv.data.datasets[1].data = [{ x: me.hours, y: curveV(cur, me.hours) }];
+  chAdv.options.scales.x.min = 0; chAdv.options.scales.x.max = tEnd; chAdv.update('none');
+  $('advTable').innerHTML = '<tr><th>Rapporto</th><th>Temp. necessaria</th><th>Pronto dopo</th><th>Note</th></tr>' +
+    opts.map((o) => `<tr class="${o.R === R ? 'best' : o.feasible ? '' : 'dim'}"><td>1 : ${o.R}</td><td>${fmt(o.Treq, 1)} °C${o.feasible ? '' : ' ✗'}</td><td>${fmtDur(o.hours)} ±${fmt(cal.spread * 100, 0)}%</td>
+      <td>${[o.early ? 'troppo lento anche a ' + TLIM.min + ' °C' : '', o.late ? 'troppo rapido da raggiungere' : '', o.n ? `già provato ${o.n}×` : 'mai provato'].filter(Boolean).join(' · ')}</td></tr>`).join('');
+}
+function renderHealth(cal) {
+  const h = health(cal);
+  if (!h) { $('healthBox').innerHTML = `<p class="muted">Ancora nessun ciclo concluso: non posso dire come sta. Il primo test utile è un <b>1 : 1 a 27 °C</b>: in un lievito in forma è pronto in circa ${fmtDur(REF_1_1)}.</p>`; return; }
+  const sp = Math.round(h.speed * 100), cls = sp >= 90 ? 'ok' : sp >= 70 ? 'info' : 'warn';
+  const lab = sp >= 90 ? 'in forma' : sp >= 70 ? 'un po\' lento' : 'debole';
+  $('healthBox').innerHTML = `<div class="alert ${cls}"><b>Vigore: ${sp}% — ${lab}</b>Velocità rispetto a un 1 : 1 in forma (pronto in ${fmtDur(REF_1_1)} a 27 °C).${h.hasRatio1 ? '' : ' Valore indicativo: non hai ancora un ciclo 1 : 1.'}${h.amp ? `<br>Crescita: ${Math.round(h.amp * 100)}% di quella attesa (×${fmt(1 + (cal.A['1'] || 0), 1)} contro ×2,4).` : ''}</div>`;
+}
+function renderCoverage() {
+  const cov = coverage(S.runs), nt = nextTests(S.runs);
+  $('covTable').innerHTML = '<tr><th>Rapporto</th>' + T_BANDS.map(([a, b]) => `<th>${a}–${Math.round(b)} °C</th>`).join('') + '</tr>' +
+    cov.map((r) => `<tr><td>1 : ${r.R}</td>${r.cells.map((c, i) => `<td class="${c ? '' : nt.some((t) => t.R === r.R && t.band === i) ? 'best' : 'dim'}">${c || '·'}</td>`).join('')}</tr>`).join('');
+  const t = nt[0];
+  $('covNote').textContent = t ? `Prossima prova utile: 1 : ${t.R} tra ${T_BANDS[t.band][0]} e ${Math.round(T_BANDS[t.band][1])} °C (le celle evidenziate sono quelle prioritarie).` : 'Le prove principali sono coperte: ripeti quelle che ti servono di più per stringere l\'incertezza.';
+}
+function renderStrategy(cal) {
+  const h = health(cal), weak = !h || h.speed < 0.9;
+  $('strategy').innerHTML = weak ? `<ol>
+    <li><b>Rimettilo in moto (3–5 giorni):</b> solo rinfreschi di <b>produzione 1 : 1 a 26–28 °C</b>, a ogni picco (circa ${fmtDur(REF_1_1)}–4 h se è sano), tenendo l'idratazione fissa (${$('cIdr').value || 45}%). Niente freddo finché non raddoppia con regolarità.</li>
+    <li><b>Nutrimento:</b> in questa fase sostituisci il 10–20% della farina con integrale o con un po' di segale; farina forte e acqua non troppo fredda, ma senza cloro (lasciala riposare qualche ora).</li>
+    <li><b>Pulizia:</b> a ogni rinfresco butta quasi tutto e lascia l'inoculo minimo (circa un quarto del peso totale), in un contenitore pulito: così l'acidità accumulata viene diluita.</li>
+    <li><b>Controllo:</b> a ogni ciclo concluso la pagina adatta la curva e aggiorna il vigore qui sopra. Si considera ripreso con vigore ≥ 90% e crescita ≥ ×2,3 per due cicli di fila.</li>
+    <li><b>Poi alterna:</b> 1 : 2 al freddo (15–18 °C, 20–24 h) per tenerlo, e almeno 2 rinfreschi di produzione a settimana, anche senza panificare.</li></ol>
+    <p class="muted small">Sono indicazioni generali di buona pratica, non una diagnosi: se vedi muffa (peluria colorata), odore sgradevole o liquido rosato, butta il lievito e riparti da una porzione sana.</p>` :
+  `<ol><li>Il lievito è in forma: alterna <b>1 : 2 al freddo</b> (15–18 °C, 20–24 h) per il mantenimento e <b>1 : 1 a 26–28 °C</b> per produrre, con almeno 2 rinfreschi di produzione a settimana.</li>
+    <li>Per i lievitati scegli l'orario in cui ti serve e il rapporto: la pagina ti dice a che temperatura tenerlo.</li>
+    <li>Se il vigore scende sotto il 90%, torna alla fase di recupero: 1 : 1 caldo a ogni picco per qualche giorno.</li></ol>`;
 }
 
 // ------------------------------------------------------------------ schede e avvio
@@ -317,7 +360,7 @@ function showTab(name) {
   window.scrollTo(0, 0);
   if (name === 'ora') { requestAnimationFrame(() => { chTemp.resize(); chGrow.resize(); }); camTick(); }
   if (name === 'storico') { renderRuns(); renderCompare(); requestAnimationFrame(() => { chCmp.resize(); chCmpT.resize(); }); }
-  if (name === 'consigli') { if (!$('cTarget').value) { $('cTarget').value = dtLocal(Date.now() + 10 * 3600e3); $('cFrom').value = dtLocal(Date.now()); } renderAdvice(); }
+  if (name === 'consigli') { if (!$('cTarget').value) { $('cTarget').value = dtLocal(Date.now() + 10 * 3600e3); $('cFrom').value = dtLocal(Date.now()); } renderAdvice(); requestAnimationFrame(() => chAdv.resize()); }
 }
 
 function wire() {
@@ -346,7 +389,13 @@ function wire() {
     }
   });
   $('runList').addEventListener('change', (e) => { const id = e.target.dataset.cmp; if (!id) return; e.target.checked ? S.cmpSel.add(id) : S.cmpSel.delete(id); renderCompare(); });
-  ['cTarget', 'cFrom', 'cIdr', 'cNight'].forEach((i) => $(i).addEventListener('input', renderAdvice));
+  ['cTarget', 'cFrom', 'cIdr', 'cNight', 'cRatio', 'cFrac'].forEach((i) => $(i).addEventListener('input', renderAdvice));
+  $('btnUseAdv').addEventListener('click', () => {
+    if (!advState) return;
+    $('fR').value = String(advState.R); if ([...$('fIdr').options].some((o) => +o.value === advState.idr)) $('fIdr').value = String(advState.idr);
+    document.querySelector('input[name=plan][value=fissa]').checked = true; $('fTset').value = advState.T;
+    showTab('nuovo'); toast(`Precompilato: 1 : ${advState.R}, ${fmt(advState.T, 1)} °C fissi`);
+  });
   $('btnArea').addEventListener('click', () => cmd('area', { area: +$('sArea').value }, 'Sezione aggiornata'));
   $('btnHold').addEventListener('click', () => cmd('hold', { tset: +$('sHold').value }, 'Temperatura a riposo impostata'));
   $('btnHoldOff').addEventListener('click', () => cmd('hold', { tset: null }, 'Nessuna regolazione a riposo'));
