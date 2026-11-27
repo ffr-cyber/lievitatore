@@ -1,6 +1,6 @@
 // app.js - interfaccia del lievitatore
 import { openDb } from './db.js';
-import { MP, TLIM, SHAPE, calibrate, predictHours, usableRuns, fitCurve, curveV, advise, health, coverage, nextTests, T_BANDS, REF_1_1 } from './model.js?v=m4';
+import { MP, TLIM, SHAPE, calibrate, predictHours, predictCurve, usableRuns, fitCurve, curveV, advise, health, coverage, nextTests, T_BANDS, REF_1_1 } from './model.js?v=m4';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
