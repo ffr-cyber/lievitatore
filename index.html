@@ -55,6 +55,7 @@
         <div class="card metric"><div class="label">Temp. Govee (cella)</div><div id="mTg" class="val">—</div><div id="mTgSub" class="muted"></div></div>
         <div class="card metric"><div class="label">Temp. esterna</div><div id="mText" class="val">—</div><div id="mTextAge" class="muted"></div></div>
         <div class="card metric"><div class="label">Setpoint</div><div id="mTset" class="val">—</div><div id="mTreq" class="muted"></div></div>
+        <div class="card metric"><div class="label">Pronto previsto</div><div id="mEta" class="val">—</div><div id="mEtaSub" class="muted"></div></div>
         <div class="card metric"><div class="label">Avanzamento</div><div id="mP" class="val">—</div><div id="mForza" class="muted"></div></div>
         <div class="card metric"><div class="label">Potenza ciabatta</div><div id="mPow" class="val">—</div><div id="mVolt" class="muted"></div></div>
       </div>
@@ -131,7 +132,7 @@
         </div>
         <fieldset>
           <legend>Temperatura</legend>
-          <label class="inline"><input type="radio" name="plan" value="durata" checked> Pronto tra <input id="fOre" type="number" min="2" max="48" step="0.5" value="6" class="short"> ore (la scheda sceglie la temperatura, 22–29 °C)</label>
+          <label class="inline"><input type="radio" name="plan" value="durata" checked> Pronto tra <input id="fOre" type="number" min="2" max="48" step="0.5" value="6" class="short"> ore (la scheda sceglie la temperatura, 13–29 °C)</label>
           <label class="inline"><input type="radio" name="plan" value="fissa"> Temperatura fissa <input id="fTset" type="number" min="4" max="29" step="0.5" value="26" class="short"> °C</label>
         </fieldset>
         <label>Note<textarea id="fNotes" rows="2" maxlength="300"></textarea></label>
@@ -265,6 +266,6 @@
 </form></dialog>
 
 <div id="toast" class="toast" role="status" hidden></div>
-<script type="module" src="app.js?v=m3"></script>
+<script type="module" src="app.js?v=m4"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 // app.js - interfaccia del lievitatore
 import { openDb } from './db.js';
-import { MP, TLIM, SHAPE, calibrate, predictHours, usableRuns, fitCurve, curveV, advise, health, coverage, nextTests, T_BANDS, REF_1_1 } from './model.js?v=m2';
+import { MP, TLIM, SHAPE, calibrate, predictHours, usableRuns, fitCurve, curveV, advise, health, coverage, nextTests, T_BANDS, REF_1_1 } from './model.js?v=m4';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -156,6 +156,32 @@ function alerts(L) {
   return a;
 }
 
+// previsione dell'ora in cui sara' pronto: curva misurata (se c'e' abbastanza crescita), altrimenti modello e temperatura attuale
+function renderEta(L) {
+  const run = S.runs.find((r) => r.id === L.run);
+  if (!L.run || !run) { $('mEta').textContent = '—'; $('mEtaSub').textContent = ''; return; }
+  if (L.fase === 'PRONTO' || L.fase === 'OLTRE APICE' || L.fase === 'DECADIMENTO') { $('mEta').textContent = 'ora'; $('mEtaSub').textContent = 'fase ' + L.fase.toLowerCase(); return; }
+  let readyH = NaN, src = '';
+  const pts = (S.runSeries || []).filter((x) => num(x.vf)).map((x) => ({ h: (x.t - run.start) / 3600e3, v: x.vf }));
+  const fit = pts.length > 60 ? fitCurve(pts) : null;
+  if (fit && fit.rmse < 0.12 && fit.peakV > 1.3) { readyH = fit.readyH; src = 'dalla curva misurata'; }
+  else {
+    const key = S.runs.length + ':' + S.runs.map((r) => r.fit ? 1 : 0).join('');
+    if (S.calKey !== key) { S.cal = calibrate(S.runs); S.calKey = key; }
+    const T = num(L.tset) ? L.tset : (num(L.tin) ? L.tin : 22);
+    const pc = predictCurve(S.cal, run.ratio, run.idr, T);
+    if (Number.isFinite(pc.readyH)) { readyH = pc.readyH; src = `dal modello a ${fmt(T, 0)} °C`; }
+  }
+  if (!Number.isFinite(readyH)) { $('mEta').textContent = '—'; $('mEtaSub').textContent = 'dati insufficienti'; return; }
+  const when = run.start + readyH * 3600e3, d = new Date(when);
+  const hm = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  const day = d.toDateString() === new Date().toDateString() ? '' : d.toLocaleDateString('it-IT', { weekday: 'short' }) + ' ';
+  $('mEta').textContent = day + hm;
+  const tg = L.oreTarget > 0 ? run.start + L.oreTarget * 3600e3 : null;
+  const dd = tg ? (when - tg) / 60000 : null;
+  $('mEtaSub').textContent = src + (dd != null ? (Math.abs(dd) < 20 ? ' · in orario' : dd < 0 ? ` · ${fmtDur(-dd / 60)} prima dell'obiettivo` : ` · ${fmtDur(dd / 60)} dopo l'obiettivo`) : '');
+}
+
 function renderLive() {
   const L = S.live, age = L ? Date.now() / 1000 - L.ts : Infinity;
   const c = $('conn'); c.className = 'chip ' + (age < 180 ? 'ok' : L ? 'bad' : '');
@@ -183,6 +209,7 @@ function renderLive() {
     : 'Nessuna prova in corso.';
   $('mTset').textContent = num(L.tset) ? `${fmt(L.tset)} °C` : 'nessuno';
   $('mTreq').textContent = num(L.treq) && Math.abs(L.treq - L.tset) > 0.3 ? `richiesti ${fmt(L.treq)} °C` : '';
+  renderEta(L);
   $('mP').textContent = num(L.P) ? `${fmt(L.P * 100, 0)} %` : '—';
   $('mForza').textContent = num(L.forza) ? (L.forza > 1.05 ? `${fmt((L.forza - 1) * 100, 0)}% più veloce del modello` : L.forza < 0.95 ? `${fmt((1 - L.forza) * 100, 0)}% più lento del modello` : 'come da modello') : '';
   $('modeOsserva').classList.toggle('on', L.mode !== 'controllo'); $('modeControllo').classList.toggle('on', L.mode === 'controllo');
@@ -314,7 +341,7 @@ function renderAdvice() {
   const hr = new Date(from).getHours(), night = hr >= 23 || hr < 6;
   let msg;
   if (me.feasible) {
-    msg = `<div class="alert ok"><b>1 : ${R} a ${fmt(me.Treq, 1)} °C</b>Rinfresca alle ${fmtDT(from)} e tieni la cella a ${fmt(me.Treq, 1)} °C: sarà pronto ${fmtDT(target)} (tra ${fmtDur(me.lo)} e ${fmtDur(me.hi)}).${night && noNight ? ' <br>Attenzione: è un orario di notte.' : ''}${me.Treq < MP.tsetMin ? '<br>Sotto 22 °C usa la <b>temperatura fissa</b> nel nuovo rinfresco.' : ''}</div>`;
+    msg = `<div class="alert ok"><b>1 : ${R} a ${fmt(me.Treq, 1)} °C</b>Rinfresca alle ${fmtDT(from)} e tieni la cella a ${fmt(me.Treq, 1)} °C: sarà pronto ${fmtDT(target)} (tra ${fmtDur(me.lo)} e ${fmtDur(me.hi)}).${night && noNight ? ' <br>Attenzione: è un orario di notte.' : ''}${me.Treq < MP.tsetMin ? '<br>Sotto ' + MP.tsetMin + ' °C usa la <b>temperatura fissa</b> nel nuovo rinfresco.' : ''}</div>`;
   } else if (me.early) {
     msg = `<div class="alert warn"><b>Troppo tempo per 1 : ${R}</b>Servirebbe ${fmt(me.Treq, 1)} °C, sotto il minimo di ${TLIM.min} °C. A ${TLIM.min} °C sarà pronto dopo circa ${fmtDur(me.hours)}: usa un rapporto più diluito o rinfresca più tardi.</div>`;
   } else {

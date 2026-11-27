@@ -1,5 +1,5 @@
 // model.js - stesso modello del firmware (logic.h) e motore dei consigli.
-export const MP = { tminR: 3, tmaxR: 38, cR: 0.3, tRef: 28, mu: 0.3529, lam: 0.0868, tsetMin: 22, tsetMax: 29 };
+export const MP = { tminR: 3, tmaxR: 38, cR: 0.3, tRef: 28, mu: 0.3529, lam: 0.0868, tsetMin: 13, tsetMax: 29 };
 
 export function kT(T) {
   const sq = (t) => (t <= MP.tminR || t >= MP.tmaxR ? 0 : (t - MP.tminR) * (1 - Math.exp(MP.cR * (t - MP.tmaxR))));
